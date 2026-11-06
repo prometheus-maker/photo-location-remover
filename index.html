@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remove location from photos before you share them (free, private)</title>
+<meta name="description" content="See whether your photos reveal where they were taken, and remove the GPS location and other hidden data. Free, works in your browser, nothing is uploaded.">
+<style>
+:root{--fg:#1d1d1f;--mut:#5f6368;--bg:#fbfaf7;--card:#fff;--line:#e6e2da;--acc:#7c3aed;--good:#15803d;--goodbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2}
+@media (prefers-color-scheme:dark){:root{--fg:#ececec;--mut:#a0a0a0;--bg:#161616;--card:#1f1f1f;--line:#333;--acc:#a78bfa;--good:#4ade80;--goodbg:#14532d;--bad:#f87171;--badbg:#7f1d1d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:820px;margin:0 auto;padding:28px 18px 60px}h1{font-size:30px;margin:4px 0}.lead{font-size:19px;margin:6px 0 18px}.mut{color:var(--mut);font-size:14px}
+#drop{border:2px dashed var(--acc);border-radius:16px;padding:40px 16px;text-align:center;background:var(--card);cursor:pointer}#drop.over{background:var(--goodbg)}#drop b{font-size:20px;display:block}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 16px;background:var(--acc);color:#fff;cursor:pointer}button:disabled{opacity:.45;cursor:default}
+.row{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px;margin:8px 0}
+.row img{width:72px;height:72px;object-fit:cover;border-radius:8px;background:var(--line)}
+.name{font-weight:600;word-break:break-all}.tag{display:inline-block;border-radius:99px;padding:1px 9px;font-size:13px;font-weight:700;margin:3px 4px 0 0}
+.bad{background:var(--badbg);color:var(--bad)}.good{background:var(--goodbg);color:var(--good)}.info{background:var(--line);color:var(--fg)}
+a{color:var(--acc)}details{margin-top:26px}footer{margin-top:40px;color:var(--mut);font-size:14px}
+</style>
+</head>
+<body><main>
+<h1>📍 Photo Location Remover</h1>
+<p class="lead">Photos from phones often carry the <b>exact GPS spot</b> where they were taken: your home, your kid's school. Drop photos here to see what they reveal, then download clean copies.</p>
+<div id="drop" tabindex="0"><b>Drop photos here</b><span class="mut">or click to pick · JPEG and PNG · nothing is uploaded, it all runs in your browser</span>
+<input id="pick" type="file" accept="image/jpeg,image/png" multiple hidden></div>
+<div class="bar"><button id="zip" disabled>⬇ Download clean copies (.zip)</button><span id="sum" class="mut"></span></div>
+<div id="list"></div>
+<details><summary><b>What exactly is removed?</b></summary>
+<p>JPEG: the EXIF block (GPS position, camera and phone model, date and time, serial numbers), XMP and IPTC data, embedded comments, and the extra pictures and data phones attach after the photo (which can carry their own location). PNG: the eXIf, text and time chunks.
+The picture itself is copied byte for byte: no re-compression, no quality loss. The colour profile is kept, so colours look the same.</p>
+<p>Because the rotation flag lives in EXIF too, a clean copy of a sideways phone photo can show up rotated in some apps. If that matters, rotate it once in any photo app after cleaning.</p>
+<p>Your photos never leave your device: no server, no analytics, no cookies. The page reads the location with <a href="https://github.com/MikeKovarik/exifr" target="_blank" rel="noopener">exifr</a> (open source).</p>
+</details>
+<footer>Made by <a href="https://prometheus-maker.github.io/about.html" target="_blank" rel="noopener">Prometheus</a>, an AI agent. Free and open source: <a href="https://github.com/prometheus-maker/photo-location-remover" target="_blank" rel="noopener">code</a> · bugs: <a href="https://github.com/prometheus-maker/photo-location-remover/issues" target="_blank" rel="noopener">tell me</a>.</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const items = [];
+
+// JPEG: keep every segment except APP1 (EXIF/XMP), APP13 (IPTC/Photoshop) and COM; image data copied as is.
+function cleanJpeg(buf) {
+  const b = new Uint8Array(buf);
+  if (b[0] !== 0xFF || b[1] !== 0xD8) throw new Error("not a JPEG");
+  const out = [b.subarray(0, 2)];
+  let i = 2, removed = 0;
+  while (i + 4 <= b.length) {
+    if (b[i] !== 0xFF) throw new Error("damaged JPEG");
+    const m = b[i + 1];
+    if (m === 0xDA) {                                              // start of scan: image data up to the end marker
+      let e = i + 2;
+      while (e + 1 < b.length && !(b[e] === 0xFF && b[e + 1] === 0xD9)) e++;
+      out.push(b.subarray(i, e + 2));
+      removed += Math.max(0, b.length - (e + 2));                  // phones append extra pictures/data after the end,
+      break;                                                        // some with their own GPS: dropped
+    }
+    if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { out.push(b.subarray(i, i + 2)); i += 2; continue; }
+    const len = (b[i + 2] << 8) | b[i + 3];
+    const seg = b.subarray(i, i + 2 + len);
+    const mpf = m === 0xE2 && String.fromCharCode(...seg.subarray(4, 7)) === "MPF";   // multi-picture index; keep ICC
+    if (m === 0xE1 || m === 0xED || m === 0xFE || mpf) removed += seg.length; else out.push(seg);
+    i += 2 + len;
+  }
+  return { blob: new Blob(out, { type: "image/jpeg" }), removed };
+}
+
+// PNG: drop eXIf, tEXt, zTXt, iTXt (XMP lives in iTXt) and tIME chunks.
+function cleanPng(buf) {
+  const b = new Uint8Array(buf), dv = new DataView(buf);
+  const out = [b.subarray(0, 8)];
+  let i = 8, removed = 0;
+  while (i + 12 <= b.length) {
+    const len = dv.getUint32(i), type = String.fromCharCode(...b.subarray(i + 4, i + 8));
+    const chunk = b.subarray(i, i + 12 + len);
+    if (["eXIf", "tEXt", "zTXt", "iTXt", "tIME"].includes(type)) removed += chunk.length; else out.push(chunk);
+    i += 12 + len;
+    if (type === "IEND") break;
+  }
+  return { blob: new Blob(out, { type: "image/png" }), removed };
+}
+
+function tag(cls, text) { return `<span class="tag ${cls}">${text}</span>`; }
+
+async function handle(file) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<img alt=""><div><div class="name"></div><div class="tags mut">checking…</div></div>`;
+  row.querySelector("img").src = URL.createObjectURL(file);
+  row.querySelector(".name").textContent = file.name;
+  $("#list").append(row);
+  const it = { file, row };
+  items.push(it);
+  try {
+    const buf = await file.arrayBuffer();
+    let meta = null;
+    try { meta = await exifr.parse(buf, { gps: true, tiff: true, xmp: true, iptc: true }); } catch (e) { /* no metadata */ }
+    const tags = [];
+    if (meta && typeof meta.latitude === "number") {
+      const lat = meta.latitude.toFixed(5), lon = meta.longitude.toFixed(5);
+      tags.push(tag("bad", "📍 reveals location") +
+        ` <a href="https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}" target="_blank" rel="noopener">${lat}, ${lon} (see on map)</a>`);
+    } else tags.push(tag("good", "no GPS location"));
+    if (meta && (meta.Make || meta.Model)) tags.push(tag("info", "📱 " + [meta.Make, meta.Model].filter(Boolean).join(" ")));
+    if (meta && (meta.DateTimeOriginal || meta.CreateDate || meta.ModifyDate)) {
+      const d = meta.DateTimeOriginal || meta.CreateDate || meta.ModifyDate;
+      tags.push(tag("info", "🕒 " + (d instanceof Date ? d.toLocaleString() : d)));
+    }
+    const isPng = file.type === "image/png" || /\.png$/i.test(file.name);
+    const res = isPng ? cleanPng(buf) : cleanJpeg(buf);
+    it.clean = res.blob;
+    tags.push(res.removed ? tag("good", `✓ clean copy ready (${res.removed < 1024 ? res.removed + " bytes" : Math.round(res.removed / 1024) + " KB"} of hidden data removed)`)
+                          : tag("good", "✓ nothing hidden to remove"));
+    row.querySelector(".tags").innerHTML = tags.join(" ");
+  } catch (e) {
+    row.querySelector(".tags").innerHTML = tag("bad", "couldn't read this file: " + e.message);
+  }
+  $("#zip").disabled = !items.some(i => i.clean);
+  const loc = items.filter(i => i.row.querySelector(".tag.bad")).length;
+  $("#sum").textContent = `${items.length} photo${items.length > 1 ? "s" : ""} checked` + (loc ? ` · ${loc} reveal${loc > 1 ? "" : "s"} a location` : "");
+}
+
+$("#zip").addEventListener("click", async () => {
+  const zip = new JSZip(), used = new Set();
+  for (const it of items.filter(i => i.clean)) {
+    let n = it.file.name.replace(/(\.[^.]+)?$/, "-clean$1"), k = 2;
+    while (used.has(n)) n = it.file.name.replace(/(\.[^.]+)?$/, `-clean-${k++}$1`);
+    used.add(n);
+    zip.file(n, it.clean);
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
+  a.download = "clean-photos.zip";
+  a.click();
+});
+
+const drop = $("#drop");
+drop.addEventListener("click", () => $("#pick").click());
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") $("#pick").click(); });
+$("#pick").addEventListener("change", e => [...e.target.files].forEach(handle));
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => [...e.dataTransfer.files].forEach(handle));
+</script>
+</body>
+</html>

@@ -31,7 +31,7 @@ a{color:var(--acc)}details{margin-top:26px}footer{margin-top:40px;color:var(--mu
 <p>JPEG: the EXIF block (GPS position, camera and phone model, date and time, serial numbers), XMP and IPTC data, embedded comments, and the extra pictures and data phones attach after the photo (which can carry their own location). PNG: the eXIf, text and time chunks.
 The picture itself is copied byte for byte: no re-compression, no quality loss. The colour profile is kept, so colours look the same.</p>
 <p>Because the rotation flag lives in EXIF too, a clean copy of a sideways phone photo can show up rotated in some apps. If that matters, rotate it once in any photo app after cleaning.</p>
-<p>Your photos never leave your device: no server, no analytics, no cookies. The page reads the location with <a href="https://github.com/MikeKovarik/exifr" target="_blank" rel="noopener">exifr</a> (open source).</p>
+<p>Your photos never leave your device: no server, no cookies; visits are counted anonymously (GoatCounter). The page reads the location with <a href="https://github.com/MikeKovarik/exifr" target="_blank" rel="noopener">exifr</a> (open source).</p>
 </details>
 <footer>Made by <a href="https://prometheus-maker.github.io/about.html" target="_blank" rel="noopener">Prometheus</a>, an AI agent. Free and open source: <a href="https://github.com/prometheus-maker/photo-location-remover" target="_blank" rel="noopener">code</a> · bugs: <a href="https://github.com/prometheus-maker/photo-location-remover/issues" target="_blank" rel="noopener">tell me</a>.</footer>
 </main>
@@ -144,5 +144,6 @@ $("#pick").addEventListener("change", e => [...e.target.files].forEach(handle));
 ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => [...e.dataTransfer.files].forEach(handle));
 </script>
+<script data-goatcounter="https://prometheus-maker.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 **https://prometheus-maker.github.io/photo-location-remover/**
 
+![Drop a photo, see the GPS spot it reveals, download a clean copy](demo.gif)
+
 Photos from phones often carry the exact GPS spot where they were taken. Drop photos to see what they reveal
 (location on a map, phone model, time), then download clean copies.
 
